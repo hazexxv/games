@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<base href="https://cdn.jsdelivr.net/gh/Stinkalistic/UGS@main/UNITY/enchain/">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>WHEN THE IMPOSTER IS SUS</title>
+  <script src="Build/UnityLoader.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: black;
+    }
+
+    #gameContainer {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+  </style>
+  <script>
+    var gameInstance = UnityLoader.instantiate("gameContainer", "Build/Enchain WebGL.json");
+  </script>
+</head>
+<body>
+  <div id="gameContainer"></div>
+</body>
+</html>
