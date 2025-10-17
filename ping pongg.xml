@@ -1,0 +1,413 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+
+</style>
+</head>
+<body>
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8" />
+  <title>i was bored</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #1a0a00, #3d1f00);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Orbitron', monospace;
+      color: #ff6f00;
+      user-select: none;
+      overflow: hidden;
+      position: relative;
+      flex-direction: column;
+    }
+
+    canvas {
+      background: #200900;
+      border: 3px solid #ff6f00;
+      box-shadow:
+        0 0 15px #ff6f00,
+        0 0 30px #ff6f00,
+        0 0 40px #ff6f00 inset;
+      display: block;
+      border-radius: 10px;
+    }
+
+    #scoreBoard {
+      display: flex;
+      justify-content: center;
+      gap: 60px;
+      width: 320px;
+      margin-bottom: 15px;
+      padding: 10px 30px;
+      background: rgba(255,111,0,0.15);
+      box-shadow:
+        0 0 20px #ff6f00,
+        inset 0 0 15px #ff6f00;
+      border-radius: 15px;
+      font-size: 36px;
+      font-weight: 900;
+      color: #ff6f00;
+      text-shadow:
+        0 0 8px #ff6f00,
+        0 0 15px #ff6f00;
+      user-select: none;
+    }
+
+    #winnerMessage {
+      font-size: 48px;
+      font-weight: 900;
+      color: #ffb74d;
+      text-shadow:
+        0 0 15px #ffb74d,
+        0 0 30px #ffb74d,
+        0 0 50px #ffb74d;
+      margin-bottom: 20px;
+      height: 60px;
+      user-select: none;
+      min-height: 60px;
+    }
+
+    #instructions {
+      font-size: 14px;
+      color: #ff6f00cc;
+      text-shadow: 0 0 6px #ff6f00aa;
+      margin-top: 8px;
+      user-select: none;
+      letter-spacing: 0.08em;
+    }
+  </style>
+</head>
+<body>
+  <div id="scoreBoard">
+    <div id="scoreLeft">0</div>
+    <div id="scoreRight">0</div>
+  </div>
+  <div id="winnerMessage"></div>
+  <canvas id="pong" width="800" height="450"></canvas>
+  <div id="instructions">Left: W/S  |  Right: ↑/↓  |  First to 10 wins</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('pong');
+  const ctx = canvas.getContext('2d');
+  const scoreLeftEl = document.getElementById('scoreLeft');
+  const scoreRightEl = document.getElementById('scoreRight');
+  const winnerEl = document.getElementById('winnerMessage');
+
+  const paddleWidth = 15;
+  const paddleHeight = 110;
+  const ballSize = 14;
+  const maxScore = 10;
+
+  let leftPaddle = { x: 0, y: canvas.height/2 - paddleHeight/2, speed: 10, dy: 0, posY: 0 };
+  let rightPaddle = { x: canvas.width - paddleWidth, y: canvas.height/2 - paddleHeight/2, speed: 10, dy: 0, posY: 0 };
+
+  let ball = {
+    x: canvas.width/2 - ballSize/2,
+    y: canvas.height/2 - ballSize/2,
+    speedX: 6 * (Math.random() > 0.5 ? 1 : -1),
+    speedY: (Math.random() * 4 - 2),
+    size: ballSize,
+    speedIncreaseFactor: 1.03,
+    maxSpeed: 15
+  };
+
+  let scoreLeft = 0;
+  let scoreRight = 0;
+  let gameActive = false;
+  let countdown = 3;
+  let countdownInterval = null;
+
+  // Sounds
+  const sounds = {
+    paddleHit: new Audio('https://cdn.jsdelivr.net/gh/terkelg/bitty-sounds/pong_paddle.wav'),
+    score: new Audio('https://cdn.jsdelivr.net/gh/terkelg/bitty-sounds/pong_score.wav'),
+    countdownBeep: new Audio('https://cdn.jsdelivr.net/gh/terkelg/bitty-sounds/ping.wav'),
+    win: new Audio('https://cdn.jsdelivr.net/gh/terkelg/bitty-sounds/win.wav'),
+  };
+
+  function playSound(sound) {
+    if(sound) {
+      sound.pause();
+      sound.currentTime = 0;
+      sound.play();
+    }
+  }
+
+  // Bounding box for clickable text
+  const madeByBounds = { x: 0, y: 0, width: 0, height: 0 };
+
+  // Draw Functions
+  function drawRect(x, y, w, h, color, glow = false) {
+    if(glow) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 15;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+    ctx.shadowBlur = 0;
+  }
+
+  function drawCircle(x, y, r, color, glow = false) {
+    if(glow) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 20;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawBackground() {
+    const time = Date.now() * 0.0003;
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    const c1 = `rgba(30, 12, 0, ${0.4 + 0.1 * Math.sin(time * 2)})`;
+    const c2 = `rgba(60, 30, 0, ${0.6 + 0.15 * Math.cos(time * 1.5)})`;
+    gradient.addColorStop(0, c1);
+    gradient.addColorStop(1, c2);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function drawMiddleLine() {
+    ctx.strokeStyle = '#ff6f00';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([20, 25]);
+    ctx.shadowColor = '#ff6f00';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.moveTo(canvas.width/2, 0);
+    ctx.lineTo(canvas.width/2, canvas.height);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.setLineDash([]);
+  }
+
+  function resetBall() {
+    ball.x = canvas.width/2 - ball.size/2;
+    ball.y = canvas.height/2 - ball.size/2;
+    ball.speedX = 6 * (Math.random() > 0.5 ? 1 : -1);
+    ball.speedY = (Math.random() * 4 - 2);
+  }
+
+  function update() {
+    if(!gameActive) return;
+
+    leftPaddle.posY += (leftPaddle.y - leftPaddle.posY) * 0.3;
+    rightPaddle.posY += (rightPaddle.y - rightPaddle.posY) * 0.3;
+
+    leftPaddle.posY = Math.max(Math.min(leftPaddle.posY, canvas.height - paddleHeight), 0);
+    rightPaddle.posY = Math.max(Math.min(rightPaddle.posY, canvas.height - paddleHeight), 0);
+
+    leftPaddle.y += leftPaddle.dy;
+    rightPaddle.y += rightPaddle.dy;
+    leftPaddle.y = Math.max(Math.min(leftPaddle.y, canvas.height - paddleHeight), 0);
+    rightPaddle.y = Math.max(Math.min(rightPaddle.y, canvas.height - paddleHeight), 0);
+
+    ball.x += ball.speedX;
+    ball.y += ball.speedY;
+
+    if(ball.y + ball.size > canvas.height || ball.y < 0) {
+      ball.speedY = -ball.speedY;
+    }
+
+    if(ball.x <= leftPaddle.x + paddleWidth &&
+       ball.y + ball.size >= leftPaddle.posY &&
+       ball.y <= leftPaddle.posY + paddleHeight) {
+      ball.speedX = -ball.speedX * ball.speedIncreaseFactor;
+      if(Math.abs(ball.speedX) > ball.maxSpeed) ball.speedX = ball.speedX > 0 ? ball.maxSpeed : -ball.maxSpeed;
+      let collidePoint = (ball.y + ball.size/2) - (leftPaddle.posY + paddleHeight/2);
+      ball.speedY = collidePoint * 0.3;
+      playSound(sounds.paddleHit);
+    }
+    if(ball.x + ball.size >= rightPaddle.x &&
+       ball.y + ball.size >= rightPaddle.posY &&
+       ball.y <= rightPaddle.posY + paddleHeight) {
+      ball.speedX = -ball.speedX * ball.speedIncreaseFactor;
+      if(Math.abs(ball.speedX) > ball.maxSpeed) ball.speedX = ball.speedX > 0 ? ball.maxSpeed : -ball.maxSpeed;
+      let collidePoint = (ball.y + ball.size/2) - (rightPaddle.posY + paddleHeight/2);
+      ball.speedY = collidePoint * 0.3;
+      playSound(sounds.paddleHit);
+    }
+
+    if(ball.x < 0) {
+      scoreRight++;
+      scoreRightEl.textContent = scoreRight;
+      playSound(sounds.score);
+      if(scoreRight >= maxScore) {
+        gameActive = false;
+        playSound(sounds.win);
+        showWinner('RIGHT PLAYER WINS!');
+      } else {
+        startCountdown();
+      }
+      resetBall();
+    }
+    if(ball.x + ball.size > canvas.width) {
+      scoreLeft++;
+      scoreLeftEl.textContent = scoreLeft;
+      playSound(sounds.score);
+      if(scoreLeft >= maxScore) {
+        gameActive = false;
+        playSound(sounds.win);
+        showWinner('LEFT PLAYER WINS!');
+      } else {
+        startCountdown();
+      }
+      resetBall();
+    }
+  }
+
+  function draw() {
+    drawBackground();
+    drawMiddleLine();
+
+    drawRect(leftPaddle.x, leftPaddle.posY, paddleWidth, paddleHeight, '#ff6f00', true);
+    drawRect(rightPaddle.x, rightPaddle.posY, paddleWidth, paddleHeight, '#ff6f00', true);
+
+    drawCircle(ball.x + ball.size/2, ball.y + ball.size/2, ball.size/2, '#ff6f00', true);
+
+    // Draw clickable "wsp gng" bottom right
+    const text = 'wsp gng';
+    ctx.font = '10px Orbitron, monospace';
+    ctx.fillStyle = '#ff6f0055';
+    ctx.shadowColor = '#ff6f0044';
+    ctx.shadowBlur = 4;
+    ctx.textAlign = 'right';
+    const textX = canvas.width - 8;
+    const textY = canvas.height - 8;
+    ctx.fillText(text, textX, textY);
+    ctx.shadowBlur = 0;
+
+    // Save bounding box for click detection
+    madeByBounds.x = textX - ctx.measureText(text).width;
+    madeByBounds.y = textY - 10; // approx text height
+    madeByBounds.width = ctx.measureText(text).width;
+    madeByBounds.height = 12;
+  }
+
+  function gameLoop() {
+    if(countdown > 0) {
+      winnerEl.textContent = 'Starting in ' + countdown + '...';
+    } else if(!gameActive) {
+      // wait for replay confirm
+    } else {
+      winnerEl.textContent = '';
+    }
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function showWinner(message) {
+    winnerEl.textContent = message;
+    setTimeout(() => {
+      if(confirm(message + '\nPlay again?')) {
+        scoreLeft = 0;
+        scoreRight = 0;
+        scoreLeftEl.textContent = scoreLeft;
+        scoreRightEl.textContent = scoreRight;
+        winnerEl.textContent = '';
+        startCountdown();
+        gameActive = true;
+        resetBall();
+      }
+    }, 200);
+  }
+
+  function startCountdown() {
+    countdown = 3;
+    gameActive = false;
+    winnerEl.textContent = 'Starting in ' + countdown + '...';
+    playSound(sounds.countdownBeep);
+    countdownInterval = setInterval(() => {
+      countdown--;
+      if(countdown <= 0) {
+        clearInterval(countdownInterval);
+        winnerEl.textContent = '';
+        gameActive = true;
+      } else {
+        winnerEl.textContent = 'Starting in ' + countdown + '...';
+        playSound(sounds.countdownBeep);
+      }
+    }, 1000);
+  }
+
+  // Controls
+  window.addEventListener('keydown', e => {
+    if(!gameActive) return;
+    switch(e.key.toLowerCase()) {
+      case 'w':
+        leftPaddle.dy = -leftPaddle.speed;
+        break;
+      case 's':
+        leftPaddle.dy = leftPaddle.speed;
+        break;
+      case 'arrowup':
+        rightPaddle.dy = -rightPaddle.speed;
+        break;
+      case 'arrowdown':
+        rightPaddle.dy = rightPaddle.speed;
+        break;
+    }
+  });
+
+  window.addEventListener('keyup', e => {
+    switch(e.key.toLowerCase()) {
+      case 'w':
+      case 's':
+        leftPaddle.dy = 0;
+        break;
+      case 'arrowup':
+      case 'arrowdown':
+        rightPaddle.dy = 0;
+        break;
+    }
+  });
+
+  // Click handler for "wsp gng"
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    if (
+      mouseX >= madeByBounds.x &&
+      mouseX <= madeByBounds.x + madeByBounds.width &&
+      mouseY >= madeByBounds.y &&
+      mouseY <= madeByBounds.y + madeByBounds.height
+    ) {
+      window.open('https://sites.google.com/view/elite-gamez/home?authuser=0', '_blank');
+    }
+  });
+
+  startCountdown();
+  gameLoop();
+})();
+</script>
+</body>
+</html>
+
+
+<script>
+
+</script>
+</body>
+</html>
